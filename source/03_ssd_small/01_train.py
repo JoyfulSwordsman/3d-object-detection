@@ -173,13 +173,8 @@ def explore(inputs):
 
 
 def train_main(model, dataset, optimizer, list_train_img, target_classes, num_iter, epoch, distance_upper_bound):
-
     logger = getLogger('root')
-
     model.train()
-
-    # load target coord
-
     dataset = SampleDataset(
         dir_img=f'../../input/{dataset}/train',
         coord_path=f'../../input/{dataset}/coordinates.csv',
@@ -188,15 +183,9 @@ def train_main(model, dataset, optimizer, list_train_img, target_classes, num_it
         crop_type=3,
         target_classes=target_classes
     )
-
-    # batch size
     batch_size = params.batch_size
-
-    # threshold for positive degree
-
     positive_iou = float(np.linspace(0.10, 0.60, 20)[min(epoch, 19)])
     negative_iou = float(np.linspace(0.01, 0.40, 20)[min(epoch, 19)])
-
     assert positive_iou > negative_iou
 
     loss_cls_ep = 0.0
@@ -210,13 +199,7 @@ def train_main(model, dataset, optimizer, list_train_img, target_classes, num_it
 
     data_loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_worker,
                              sampler=sampler, collate_fn=concat_only_tensors)
-
-    # start iteration
-
     for batch_input, target_coords, _ in tqdm(data_loader):
-
-        # load input and target
-
         batch_targets = list()
         list_trees = list()
 
@@ -224,8 +207,6 @@ def train_main(model, dataset, optimizer, list_train_img, target_classes, num_it
 
             batch_targets.append(found_coord)
             list_trees.append(cKDTree(found_coord[['x', 'y']].values))
-
-        # forward
 
         optimizer.zero_grad()
         net_out = model.forward(batch_input.float().cuda())
@@ -236,15 +217,8 @@ def train_main(model, dataset, optimizer, list_train_img, target_classes, num_it
         inputs = list()
         for tup in zip(range(batch_size), batch_targets, net_out_numpy_batch, list_trees):
             inputs.append(tup + (positive_iou, negative_iou, distance_upper_bound))
-
-        # don't use multiprocessing
-        # boxes = [explore(tup) for tup in inputs]
-
-        # # use multiprocessing
         with Pool(num_worker) as p:
             boxes = list(p.imap(explore, inputs))
-
-        # calc classification loss
 
         loss_cls = 0.0
 
@@ -267,11 +241,7 @@ def train_main(model, dataset, optimizer, list_train_img, target_classes, num_it
             v = calc_classify_loss(net_out_l, class_concat, l)
             loss_cls = loss_cls + v
             loss_cls_ep += float(v)
-
-        # calc localization loss
-
         loss_loc = 0.0
-
         for l, net_out_l in enumerate(net_out):
 
             v = calc_localization_loss(net_out_l, boxes, l, batch_targets)
@@ -279,9 +249,6 @@ def train_main(model, dataset, optimizer, list_train_img, target_classes, num_it
             loss_loc_ep += float(v)
 
         loss = loss_cls + loss_loc
-
-        # backward
-
         loss.backward()
         optimizer.step()
 
